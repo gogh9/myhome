@@ -1,4 +1,4 @@
-https://docs.google.com/spreadsheets/d/1xChoNGyb5VPtgIq-mnTHgzTf64US4MC2iOmbC4Qbp-s/edit?gid=0#gid=0
+수학 점수 확인 https://docs.google.com/spreadsheets/d/1xChoNGyb5VPtgIq-mnTHgzTf64US4MC2iOmbC4Qbp-s/edit?gid=0#gid=0
 
 <html lang="ko">
 <head>
