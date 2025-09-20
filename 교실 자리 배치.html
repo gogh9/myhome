@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>교실 자리 배치 프로그램</title>
+    <!-- Tailwind CSS CDN을 로드하여 스타일링에 사용합니다. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- html2canvas CDN을 로드하여 교실 레이아웃을 이미지로 저장하는 데 사용합니다. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* 모달 메시지를 위한 페이드인-업 애니메이션 정의 */
+        @keyframes fadeInMoveUp {
+            from {
+                opacity: 0;
+                transform: translate(-50%, 20px);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+        }
+        .animate-fade-in-up {
+            animation: fadeInMoveUp 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<!-- 프로그램 전체 배경을 흰색으로 설정하고 상단 여백을 없앱니다. -->
+<body class="min-h-screen bg-white pt-0 flex flex-col items-center font-sans">
+    <!-- 제목이 제거된 후 상단 공간을 유지하기 위한 플레이스홀더 div -->
+    <div class="h-10 mb-6"></div>
+
+    <!-- 교실 레이아웃 섹션: 흰색 배경, 둥근 모서리, 그림자, 파란색 테두리 -->
+    <div class="bg-white rounded-lg shadow-xl p-4 mb-4 w-full max-w-4xl border-4 border-blue-200">
+        <!-- 교실 레이아웃 영역: 상대적 위치, 고정 높이, 회색 배경, 둥근 모서리, 오버플로우 숨김 -->
+        <div id="classroom-layout" class="relative w-full h-[500px] bg-gray-50 rounded-lg overflow-hidden">
+            <!-- 제어 버튼들: 레이아웃 하단 중앙에 가로로 정렬 -->
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex justify-center space-x-4">
+                <!-- 자리 배정 버튼 -->
+                <button id="assign-seats-button"
+                    class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 shadow-md w-36"
+                >
+                    배정
+                </button>
+                <!-- 저장 버튼 -->
+                <button id="save-file-button"
+                    class="bg-purple-600 hover:bg-purple-800 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 shadow-md w-36"
+                >
+                    저장
+                </button>
+            </div>
+
+            <!-- 칠판: 상단 중앙에 위치, 너비 1/3, 녹색 배경 -->
+            <div class="absolute top-4 left-1/2 -translate-x-1/2 w-1/3 h-8 bg-green-700 rounded-lg shadow-lg flex items-center justify-center border-2 border-gray-800">
+                <span class="text-base font-bold text-white">칠판</span>
+            </div>
+
+            <!-- 선생님 책상: 왼쪽 상단에 위치, 주황색 배경 -->
+            <div class="absolute top-16 left-16 w-32 h-14 bg-amber-800 rounded-lg shadow-md flex items-center justify-center border-2 border-gray-700">
+                <span class="text-base font-bold text-white">선생님 책상</span>
+            </div>
+
+            <!-- 학생 책상 컨테이너: 중앙에 위치, 그리드 레이아웃으로 책상 배치 -->
+            <div id="student-desks-container" class="absolute top-32 left-1/2 -translate-x-1/2 grid gap-x-5 gap-y-6"
+                 style="grid-template-columns: repeat(6, minmax(110px, 1fr));">
+                <!-- 학생 책상은 JavaScript에 의해 동적으로 추가됩니다. -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 모달 메시지 영역: 화면 하단 중앙에 고정, 숨김 상태 -->
+    <div id="modal-message" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 hidden">
+        <!-- 메시지는 JavaScript에 의해 동적으로 삽입됩니다. -->
+    </div>
+
+    <script>
+        // 초기 학생 이름 목록 (자리 배정에 사용)
+        const initialStudentNames = [
+            '김규민', '김리강', '김명준', '김엠마', '박나율', '박소율', '박준수',
+            '우서연', '육선우', '윤지성', '이상기', '이우진', '이은진', '이혜인',
+            '이호진', '장민건', '천시유', '최하연', '황찬솔'
+        ];
+
+        // 전역 상태 변수
+        let studentNames = [...initialStudentNames]; // 현재 학생 이름 목록
+        let seatingArrangement = {}; // 현재 자리 배치 상태를 저장
+
+        // 교실 레이아웃 내 책상 위치 정의
+        const deskPositions = (() => {
+            const positions = [];
+            let deskId = 1;
+            // 6열 3행의 책상 생성
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 6; col++) {
+                    positions.push({ id: deskId++, row, col });
+                }
+            }
+            // 왼쪽 뒤에 추가 책상 하나 추가
+            positions.push({ id: deskId++, row: 3, col: 0 }); 
+            return positions;
+        })();
+
+        // DOM 요소들을 가져와 객체로 관리하여 코드 간결화
+        const elements = {
+            assignSeatsButton: document.getElementById('assign-seats-button'),
+            saveFileButton: document.getElementById('save-file-button'),
+            studentDesksContainer: document.getElementById('student-desks-container'),
+            classroomLayoutDiv: document.getElementById('classroom-layout'),
+            modalMessageDiv: document.getElementById('modal-message')
+        };
+
+        /**
+         * 화면 하단에 임시 모달 메시지를 표시합니다.
+         * @param {string} message - 표시할 메시지
+         */
+        function showModal(message) {
+            elements.modalMessageDiv.textContent = message;
+            elements.modalMessageDiv.classList.remove('hidden');
+            elements.modalMessageDiv.classList.add('animate-fade-in-up');
+            setTimeout(() => {
+                elements.modalMessageDiv.classList.add('hidden');
+                elements.modalMessageDiv.classList.remove('animate-fade-in-up');
+            }, 3000);
+        }
+
+        /**
+         * 현재 자리 배치 상태에 따라 학생 책상들을 렌더링하거나 업데이트합니다.
+         */
+        function renderDesks() {
+            elements.studentDesksContainer.innerHTML = ''; // 기존 책상들 초기화
+            deskPositions.forEach(desk => {
+                const deskDiv = document.createElement('div');
+                // 책상 스타일링을 위한 Tailwind 클래스 (너비, 높이, 배경, 그림자, 테두리, 텍스트 중앙 정렬)
+                deskDiv.className = `w-28 h-16 bg-amber-100 rounded-lg shadow-md flex items-center justify-center text-center font-medium border-2 border-amber-400`;
+                
+                // 왼쪽 뒤 책상에 대한 특별 위치 조정 (그리드 내에서 올바르게 정렬)
+                if (desk.row === 3 && desk.col === 0) {
+                    deskDiv.classList.add('col-start-1', 'mt-2');
+                }
+
+                // 컨테이너 내에서 책상의 그리드 위치 설정
+                deskDiv.style.gridColumn = desk.col + 1;
+                deskDiv.style.gridRow = desk.row + 1;
+
+                const studentName = seatingArrangement[desk.id];
+                const span = document.createElement('span');
+                // 학생 이름 텍스트를 위한 Tailwind 클래스 (글꼴 크기, 굵기)
+                span.className = 'text-base font-bold'; 
+                if (studentName) {
+                    span.classList.add('text-gray-900'); // 배정된 학생의 텍스트 색상
+                    span.textContent = studentName; // 배정된 학생의 이름 표시
+                } else {
+                    span.classList.add('text-gray-600'); // 빈 책상의 텍스트 색상
+                    span.textContent = '학생 책상'; // 빈 책상의 플레이스홀더 텍스트
+                }
+                deskDiv.appendChild(span);
+                elements.studentDesksContainer.appendChild(deskDiv);
+            });
+        }
+
+        /**
+         * '배정' 버튼에 대한 이벤트 리스너.
+         * 학생 이름을 무작위로 섞어 사용 가능한 책상에 배정합니다.
+         */
+        elements.assignSeatsButton.addEventListener('click', () => {
+            if (studentNames.length === 0) {
+                showModal("먼저 학생 이름을 추가해주세요!"); // 학생이 없으면 메시지 표시
+                return;
+            }
+
+            // 학생 이름을 무작위로 섞기
+            const shuffledStudents = [...studentNames].sort(() => Math.random() - 0.5);
+            seatingArrangement = {}; // 현재 자리 배치 초기화
+            let unassignedStudents = []; // 배정되지 못한 학생들을 저장
+
+            // 책상에 학생 배정
+            deskPositions.forEach((desk, index) => {
+                if (shuffledStudents[index]) {
+                    seatingArrangement[desk.id] = shuffledStudents[index]; // 책상에 학생 배정
+                } else {
+                    seatingArrangement[desk.id] = null; // 책상을 빈 상태로 표시
+                }
+            });
+
+            // 책상보다 학생 수가 많을 경우 배정되지 못한 학생 확인
+            if (shuffledStudents.length > deskPositions.length) {
+                unassignedStudents = shuffledStudents.slice(deskPositions.length);
+                showModal(`모든 학생을 위한 자리가 부족합니다. (${unassignedStudents.join(', ')} 학생은 배정되지 못했습니다.)`);
+            }
+            renderDesks(); // 새로운 배정으로 책상 시각적 표시 업데이트
+        });
+
+        /**
+         * '저장' 버튼에 대한 이벤트 리스너.
+         * 교실 레이아웃을 이미지로 캡처하고 사용자가 다운로드할 수 있도록 합니다.
+         */
+        elements.saveFileButton.addEventListener('click', async () => {
+            // html2canvas 라이브러리 로드 여부 확인
+            if (typeof window.html2canvas === 'undefined') {
+                showModal("이미지 저장 라이브러리 로딩 중입니다. 잠시 후 다시 시도해주세요.");
+                console.error("html2canvas 라이브러리가 로드되지 않았습니다.");
+                return;
+            }
+
+            // 자리 배정 정보가 있는지 확인
+            if (Object.keys(seatingArrangement).length === 0) {
+                showModal("저장할 자리 배정 정보가 없습니다. 먼저 자리를 배정해주세요.");
+                return;
+            }
+
+            try {
+                // html2canvas를 사용하여 교실 레이아웃 div 캡처
+                const canvas = await window.html2canvas(elements.classroomLayoutDiv, {
+                    useCORS: true, // 크로스 오리진 이미지 로딩 활성화 (여기서는 사용되지 않음)
+                    scale: 2,     // 고해상도 이미지를 위해 스케일 증가
+                    logging: false, // 콘솔을 깨끗하게 유지하기 위해 로깅 비활성화
+                });
+
+                // 캔버스를 PNG 데이터 URL로 변환
+                const imageDataUrl = canvas.toDataURL('image/png');
+
+                // 다운로드를 트리거하기 위한 임시 링크 요소 생성
+                const link = document.createElement('a');
+                link.href = imageDataUrl;
+                link.download = '교실_자리_배치.png'; // 제안 파일 이름
+                document.body.appendChild(link); // 클릭 가능하도록 body에 추가
+                link.click(); // 프로그래밍 방식으로 링크를 클릭하여 다운로드 트리거
+                document.body.removeChild(link); // 임시 링크 제거
+
+                showModal("교실 레이아웃이 이미지 파일로 저장되었습니다!"); // 성공 메시지
+
+            } catch (error) {
+                console.error("교실 레이아웃 캡처 중 오류 발생:", error);
+                showModal("이미지 저장 중 오류가 발생했습니다. 다시 시도해주세요."); // 오류 메시지
+            }
+        });
+
+        // DOM이 완전히 로드되면 애플리케이션 초기화
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDesks(); // 초기 "학생 책상" 텍스트로 책상 렌더링
+        });
+    </script>
+</body>
+</html>

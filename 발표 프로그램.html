@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>발표자 추첨</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for better Korean display */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light gray background */
+        }
+        /* Custom styles for button hover effect */
+        .btn-primary {
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+        /* Style for clickable student list items */
+        .student-item-cell {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            text-align: center; /* Center align text within the cell */
+            font-weight: bold; /* Make text bold */
+            font-size: 1.125rem; /* Equivalent to Tailwind's text-lg */
+        }
+        .student-item-cell:hover {
+            background-color: #e0e7ff; /* Light blue on hover */
+        }
+        /* Table styling */
+        .student-table {
+            border-collapse: collapse; /* Ensure borders collapse */
+        }
+        .student-table td {
+            padding: 8px;
+            border: 1px solid #e2e8f0; /* Tailwind's gray-200 */
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 pt-5 rounded-2xl shadow-xl max-w-md w-full text-center border-b-4 border-blue-500">
+
+        <!-- Selected Student Display -->
+        <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 rounded-lg mb-3 shadow-inner" role="alert">
+            <p class="font-extrabold text-3xl">발표자: <span id="selectedStudent" class="text-blue-700">?</span></p>
+        </div>
+
+        <!-- Pick Student Buttons -->
+        <div class="flex flex-row justify-center space-x-2 mb-3">
+            <button id="pickStudentBtn"
+                    class="btn-primary bg-blue-600 text-white font-extrabold py-3 px-8 rounded-xl text-2xl shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 focus:ring-opacity-75 w-2/3">
+                발표자 추첨
+            </button>
+            <button id="passStudentBtn"
+                    class="btn-primary bg-yellow-500 text-white font-bold py-3 px-8 rounded-xl text-2xl shadow-lg hover:bg-yellow-600 focus:outline-none focus:ring-4 focus:ring-yellow-300 focus:ring-opacity-75 w-1/3">
+                통과
+            </button>
+        </div>
+
+        <!-- Student List Display - Table for 2-column layout -->
+        <div class="mt-4 text-left">
+            <div id="studentListContainer" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <table id="studentTable" class="student-table w-full">
+                    <tbody id="studentTableBody">
+                        <tr><td colspan="2" class="text-gray-600 italic">학생 목록이 없습니다.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Management Buttons -->
+        <div class="flex flex-col space-y-2 mt-6">
+            <button id="resetCountsBtn"
+                    class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-75 transition duration-200 w-full">
+                발표 횟수 초기화
+            </button>
+            <button id="saveCountsToSheetBtn"
+                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 transition duration-200 w-full">
+                발표 횟수 저장
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Array to store student names and their presentation counts
+        // Each student is an object: { name: "Student Name", count: 0 }
+        let students = [];
+        // Stores the student object that was last picked by the '발표자 추첨' button
+        let lastPickedStudent = null;
+
+        // Constants for localStorage keys
+        const STUDENTS_STORAGE_KEY = 'presenter_students_data';
+
+        // Hardcoded default student list
+        const HARDCODED_DEFAULT_STUDENTS = [
+            "김규민", "김리강", "김명준", "김엠마", "박나율", "박소율", "박준수", "우서연", "육선우",
+            "윤지성", "이상기", "이우진", "이은진", "이혜인", "이호진", "장민건", "천시유", "최하연", "황찬솔"
+        ];
+
+        // Get DOM elements
+        const pickStudentBtn = document.getElementById('pickStudentBtn');
+        const passStudentBtn = document.getElementById('passStudentBtn');
+        const selectedStudentDisplay = document.getElementById('selectedStudent');
+        const studentTableBody = document.getElementById('studentTableBody');
+        const resetCountsBtn = document.getElementById('resetCountsBtn');
+        const saveCountsToSheetBtn = document.getElementById('saveCountsToSheetBtn');
+
+        // Variable to keep track of the currently displayed message box
+        let currentMessageBox = null;
+
+        /**
+         * Saves the current students array to localStorage.
+         */
+        function saveStudentsToLocalStorage() {
+            localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(students));
+        }
+
+        /**
+         * Loads students array from localStorage.
+         * @returns {Array} An array of student objects.
+         */
+        function loadStudentsFromLocalStorage() {
+            const storedData = localStorage.getItem(STUDENTS_STORAGE_KEY);
+            return storedData ? JSON.parse(storedData) : [];
+        }
+
+        /**
+         * Displays a simple message box, optionally with data to copy.
+         * This function now ensures only one message box is active at a time.
+         * @param {string} message The message to display.
+         * @param {string} [dataToCopy=''] Optional data string to display in a textarea for copying.
+         */
+        function alertMessage(message, dataToCopy = '') {
+            // Close any existing message box
+            if (currentMessageBox && document.body.contains(currentMessageBox)) {
+                document.body.removeChild(currentMessageBox);
+            }
+
+            const messageBox = document.createElement('div');
+            messageBox.className = 'fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4';
+            messageBox.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-xl text-center max-w-sm w-full">
+                    <p class="text-lg font-semibold text-gray-800 mb-4">${message}</p>
+                    ${dataToCopy ? `<textarea id="copyDataTextarea" class="w-full h-32 p-2 border rounded-lg mb-4 text-gray-800" readonly>${dataToCopy}</textarea>
+                                    <button id="copyToClipboardBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg mb-2 w-full">복사</button>` : ''}
+                    <button id="closeMessageBox" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full">확인</button>
+                </div>
+            `;
+            document.body.appendChild(messageBox);
+            currentMessageBox = messageBox; // Store reference to the new message box
+
+            document.getElementById('closeMessageBox').onclick = () => {
+                document.body.removeChild(messageBox);
+                currentMessageBox = null;
+            };
+
+            if (dataToCopy) {
+                document.getElementById('copyToClipboardBtn').onclick = () => {
+                    const textarea = document.getElementById('copyDataTextarea');
+                    textarea.select();
+                    document.execCommand('copy');
+                    
+                    const originalMessageElement = messageBox.querySelector('p');
+                    if (originalMessageElement) {
+                        originalMessageElement.textContent = '클립보드에 복사되었습니다!';
+                    }
+                    const copyBtn = document.getElementById('copyToClipboardBtn');
+                    const textArea = document.getElementById('copyDataTextarea');
+                    if (copyBtn) copyBtn.style.display = 'none';
+                    if (textArea) textArea.style.display = 'none';
+                };
+            }
+        }
+
+        /**
+         * Increments the presentation count of a specific student.
+         * @param {string} studentName The name of the student to increment.
+         */
+        function incrementStudentCount(studentName) {
+            const student = students.find(s => s.name === studentName);
+            if (student) {
+                student.count++;
+                saveStudentsToLocalStorage();
+                updateStudentListDisplay();
+                selectedStudentDisplay.textContent = student.name;
+            }
+        }
+
+        /**
+         * Updates the displayed list of students in a 2-column table format.
+         */
+        function updateStudentListDisplay() {
+            studentTableBody.innerHTML = '';
+            if (students.length === 0) {
+                const noDataRow = document.createElement('tr');
+                const noDataCell = document.createElement('td');
+                noDataCell.colSpan = 2;
+                noDataCell.className = 'text-gray-600 italic';
+                noDataCell.textContent = '학생 목록이 없습니다.';
+                noDataRow.appendChild(noDataCell);
+                studentTableBody.appendChild(noDataRow);
+                return;
+            }
+
+            const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'));
+
+            for (let i = 0; i < sortedStudents.length; i += 2) {
+                const tableRow = document.createElement('tr');
+
+                // First student cell
+                const student1 = sortedStudents[i];
+                const cell1 = document.createElement('td');
+                cell1.textContent = `${student1.name} (${student1.count}회)`;
+                cell1.className = 'py-1 px-2 text-gray-700 student-item-cell';
+                cell1.onclick = () => incrementStudentCount(student1.name);
+                tableRow.appendChild(cell1);
+
+                // Second student cell
+                if (i + 1 < sortedStudents.length) {
+                    const student2 = sortedStudents[i + 1];
+                    const cell2 = document.createElement('td');
+                    cell2.textContent = `${student2.name} (${student2.count}회)`;
+                    cell2.className = 'py-1 px-2 text-gray-700 student-item-cell';
+                    cell2.onclick = () => incrementStudentCount(student2.name);
+                    tableRow.appendChild(cell2);
+                } else {
+                    // If odd number of students, add an empty cell to complete the row
+                    const emptyCell = document.createElement('td');
+                    emptyCell.className = 'py-1 px-2';
+                    tableRow.appendChild(emptyCell);
+                }
+                studentTableBody.appendChild(tableRow);
+            }
+        }
+
+        /**
+         * Resets presentation counts for all students to 0.
+         */
+        resetCountsBtn.addEventListener('click', () => {
+            if (students.length === 0) {
+                alertMessage('초기화할 학생 목록이 없습니다.');
+                return;
+            }
+            students.forEach(student => {
+                student.count = 0;
+            });
+            saveStudentsToLocalStorage();
+            updateStudentListDisplay();
+            selectedStudentDisplay.textContent = '?';
+            alertMessage('모든 학생의 발표 횟수가 초기화되었습니다.');
+        });
+
+        /**
+         * Randomly picks a student, increments their count, and updates display.
+         */
+        pickStudentBtn.addEventListener('click', () => {
+            if (students.length === 0) {
+                selectedStudentDisplay.textContent = '학생 없음!';
+                return;
+            }
+            const randomIndex = Math.floor(Math.random() * students.length);
+            const selectedStudent = students[randomIndex];
+
+            selectedStudent.count++;
+            saveStudentsToLocalStorage();
+
+            lastPickedStudent = selectedStudent;
+
+            selectedStudentDisplay.textContent = selectedStudent.name;
+            updateStudentListDisplay();
+        });
+
+        /**
+         * Decrements the count of the previously picked student and clears the displayed name.
+         */
+        passStudentBtn.addEventListener('click', () => {
+            if (students.length === 0) {
+                alertMessage('학생 목록이 없습니다.');
+                return;
+            }
+
+            if (lastPickedStudent) {
+                const studentIndex = students.findIndex(s => s.name === lastPickedStudent.name);
+                if (studentIndex !== -1 && students[studentIndex].count > 0) {
+                    students[studentIndex].count--;
+                    saveStudentsToLocalStorage();
+                    updateStudentListDisplay();
+                } else {
+                    alertMessage(`${lastPickedStudent.name} 학생의 발표 횟수는 이미 0회이거나 찾을 수 없습니다.`);
+                }
+            } else {
+                alertMessage('이전에 선택된 발표자가 없습니다.');
+            }
+
+            selectedStudentDisplay.textContent = '?';
+            lastPickedStudent = null;
+        });
+
+        /**
+         * Saves current student counts to a sheet-friendly format (only counts, sorted by name).
+         */
+        saveCountsToSheetBtn.addEventListener('click', () => {
+            if (students.length === 0) {
+                alertMessage('저장할 학생 목록이 없습니다.');
+                return;
+            }
+
+            const sortedStudents = [...students].sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'));
+
+            let sheetData = '';
+            sortedStudents.forEach(student => {
+                sheetData += `${student.count}\n`;
+            });
+
+            alertMessage('아래 내용을 복사하여 시트에 붙여넣으세요:', sheetData.trim());
+        });
+
+
+        // Initialize display on load
+        window.onload = () => {
+            students = loadStudentsFromLocalStorage();
+            if (students.length === 0) {
+                students = HARDCODED_DEFAULT_STUDENTS.map(name => ({ name: name, count: 0 }));
+                saveStudentsToLocalStorage();
+            }
+            updateStudentListDisplay();
+        };
+    </script>
+</body>
+</html>

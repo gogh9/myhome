@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>버스 좌석 배치</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter font from Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- React and ReactDOM UMD builds -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX transformation in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        // Main App component
+        const App = () => {
+            // State to store seat information
+            const [seats, setSeats] = React.useState([]);
+            // State to store student list
+            const [students, setStudents] = React.useState([]);
+
+            // Initial student data (pre-filled and not editable via UI)
+            const initialStudentData = `김규민,남
+김리강,여
+김명준,남
+김엠마,여
+박나율,여
+박소율,여
+박준수,남
+우서연,영
+육선우,여
+윤지성,남
+이상기,남
+이우진,남
+이은진,여
+이혜인,여
+이호진,남
+장민건,남
+천시유,남
+최하연,여
+황찬솔,남
+우서연,여`;
+
+            // Function to initialize bus seats layout
+            const initializeSeatsLayout = React.useCallback(() => {
+                const newSeats = [];
+                const numRegularRows = 5; // Number of regular rows (2+2 arrangement)
+                const seatsPerRow = 4;    // Number of seats per regular row
+
+                // Generate regular rows (2+2 arrangement)
+                for (let row = 1; row <= numRegularRows; row++) {
+                    for (let seat = 1; seat <= seatsPerRow; seat++) {
+                        newSeats.push({
+                            id: `R${row}-S${seat}`,
+                            row: row,
+                            seat: seat,
+                            assignedStudent: null, // Assigned student info
+                            type: 'regular'
+                        });
+                    }
+                }
+                setSeats(newSeats);
+            }, []);
+
+            // Parse initial student data and initialize seats on component mount
+            React.useEffect(() => {
+                // Parse initial student data directly within useEffect
+                const lines = initialStudentData.split('\n').filter(line => line.trim() !== '');
+                const parsedStudents = lines.map(line => {
+                    const parts = line.split(',');
+                    if (parts.length >= 2) {
+                        return {
+                            name: parts[0].trim(),
+                            gender: parts[1].trim() // Gender (e.g., 남, 여)
+                        };
+                    }
+                    return null;
+                }).filter(student => student !== null);
+                setStudents(parsedStudents);
+
+                // Initialize seat layout
+                initializeSeatsLayout();
+            }, [initializeSeatsLayout]); // Dependency on initializeSeatsLayout to ensure it's stable
+
+            // Function to assign seats randomly based on gender and position rules
+            const assignSeatsRandomly = () => {
+                // Create a fresh empty seat array for assignment
+                const currentSeatsLayout = [];
+                const numRegularRows = 5;
+                const seatsPerRow = 4;
+
+                for (let row = 1; row <= numRegularRows; row++) {
+                    for (let seat = 1; seat <= seatsPerRow; seat++) {
+                        currentSeatsLayout.push({
+                            id: `R${row}-S${seat}`,
+                            row: row,
+                            seat: seat,
+                            assignedStudent: null,
+                            type: 'regular'
+                        });
+                    }
+                }
+
+                // Separate students by gender and shuffle them randomly
+                const maleStudents = [...students].filter(s => s.gender === '남').sort(() => Math.random() - 0.5);
+                const femaleStudents = [...students].filter(s => s.gender === '여').sort(() => Math.random() - 0.5);
+
+                // Filter and sort seats for left and right sides
+                const leftRegularSeats = currentSeatsLayout.filter(s => s.type === 'regular' && (s.seat === 1 || s.seat === 2))
+                    .sort((a, b) => a.row - b.row || a.seat - b.seat);
+                const rightRegularSeats = currentSeatsLayout.filter(s => s.type === 'regular' && (s.seat === 3 || s.seat === 4))
+                    .sort((a, b) => a.row - b.row || a.seat - b.seat);
+
+                let maleIndex = 0;
+                let femaleIndex = 0;
+
+                // 1. Assign male students to left regular seats
+                for (let i = 0; i < leftRegularSeats.length; i++) {
+                    if (maleIndex < maleStudents.length) {
+                        const seatToAssign = currentSeatsLayout.find(s => s.id === leftRegularSeats[i].id);
+                        if (seatToAssign) {
+                            seatToAssign.assignedStudent = maleStudents[maleIndex];
+                            maleIndex++;
+                        }
+                    }
+                }
+
+                // 2. Assign female students to right regular seats
+                for (let i = 0; i < rightRegularSeats.length; i++) {
+                    if (femaleIndex < femaleStudents.length) {
+                        const seatToAssign = currentSeatsLayout.find(s => s.id === rightRegularSeats[i].id);
+                        if (seatToAssign) {
+                            seatToAssign.assignedStudent = femaleStudents[femaleIndex];
+                            femaleIndex++;
+                        }
+                    }
+                }
+
+                setSeats(currentSeatsLayout);
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 p-4 font-inter flex flex-col items-center justify-center">
+                    <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl">
+                        <h1 className="text-3xl font-extrabold text-center text-gray-800 mb-6">
+                            🚌 버스 좌석 배치
+                        </h1>
+
+                        {/* Bus seat layout display area */}
+                        <div className="bg-gray-100 p-6 rounded-xl shadow-inner border border-gray-200 mb-8">
+                            <div className="flex flex-col items-center space-y-4">
+                                {/* Regular rows (2+2 arrangement) */}
+                                {Array.from({ length: 5 }).map((_, rowIndex) => (
+                                    <div key={`row-${rowIndex}`} className="flex justify-center w-full space-x-6">
+                                        {/* Left 2 seats */}
+                                        <div className="flex space-x-2">
+                                            {seats.filter(s => s.row === rowIndex + 1 && s.seat <= 2).map(seat => (
+                                                <Seat key={seat.id} seat={seat} />
+                                            ))}
+                                        </div>
+                                        {/* Aisle space */}
+                                        <div className="w-12"></div>
+                                        {/* Right 2 seats */}
+                                        <div className="flex space-x-2">
+                                            {seats.filter(s => s.row === rowIndex + 1 && s.seat > 2).map(seat => (
+                                                <Seat key={seat.id} seat={seat} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Seat assignment button, centered and sized */}
+                        <div className="flex justify-center">
+                            <button
+                                onClick={assignSeatsRandomly}
+                                className="w-1/4 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-lg mb-8"
+                            >
+                                배정
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Seat component
+        const Seat = ({ seat }) => {
+            const isOccupied = seat.assignedStudent !== null;
+            // Gender color: male is pink, female is blue
+            const genderColor = seat.assignedStudent?.gender === '남' ? 'bg-pink-300' : 'bg-blue-300';
+            const emptyColor = 'bg-gray-200 border-gray-300';
+            // Border color: male is pink, female is blue
+            const occupiedBorder = seat.assignedStudent?.gender === '남' ? 'border-pink-500' : 'border-blue-500';
+
+            return (
+                <div
+                    className={`relative w-20 h-16 flex flex-col items-center justify-center p-2 rounded-xl shadow-md border-2
+                        ${isOccupied ? `${genderColor} ${occupiedBorder}` : emptyColor}
+                        transition-all duration-300 ease-in-out
+                    `}
+                >
+                    {isOccupied ? (
+                        <p className="text-lg font-bold text-gray-800 text-center leading-tight">
+                            {seat.assignedStudent.name}
+                        </p>
+                    ) : (
+                        // Display "좌석" text for empty seats
+                        <p className="text-lg text-gray-500 font-bold">좌석</p>
+                    )}
+                </div>
+            );
+        };
+
+        // Render the App component into the root div
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
